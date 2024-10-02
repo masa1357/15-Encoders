@@ -1,0 +1,8 @@
+# Transformer Encoder のパラメータ設定
+# 指定可能パラメータ：num_layers, d_model, num_heads, dff, dropout_rate
+
+num_layers: 15
+d_model: 512
+num_heads: 8
+dff: 2048
+dropout_rate: 0.1
