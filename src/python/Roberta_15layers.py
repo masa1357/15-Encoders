@@ -82,7 +82,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #       └ RobertaEmbeddings             # -> 実装済
 #       └ RobertaEncoder                # -> 実装済
 #           └ RobertaLayer              # -> 実装済
-#               └ RobertaAttention      #! -> 未実装
+#               └ RobertaAttention      # -> 実装済
 #               └ RobertaSelfAttention  # -> 実装済
 #               └ RobertaIntermediate   #! -> 未実装
 #               └ RobertaSelfOutput     # -> 実装済
@@ -580,7 +580,94 @@ class RobertaSelfOutput(nn.Module): # -> 実装済
         """
         return hidden_states
 
-class RobertaAttention(nn.Module): #! 未実装
+class RobertaAttention(nn.Module): # -> 実装済
+    """
+    RobertaSelfAttention + RobertaSelfOutput の組み合わせ
+    Attention全体の流れを定義している
+    """
+    #INFO: 初回実行
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+        #INFO: 各インスタンスの定義
+        self.self = RobertaSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = RobertaSelfOutput(config)
+        #INFO: プルーニング用の変数の初期化
+        # -> プルーニング：モデルの一部を削除してモデルを軽量化する手法
+        self.pruned_heads = set()
+
+    #INFO: プルーニング用のメソッド
+    def prune_heads(self, heads):
+        #INFO: プルーニング対象のヘッドがない場合，何もしない
+        if len(heads) == 0:
+            return
+        #INFO: プルーニング対象のヘッドを取得
+        # -> find_pruneable_heads_and_indices() でプルーニング対象のヘッドを取得
+        """
+        Parameters
+        ----------
+        heads : List[int]
+            プルーニング対象のヘッドのリスト
+        self.num_attention_heads : int
+            アテンションヘッドの数
+        self.attention_head_size : int
+            アテンションヘッドのサイズ
+        self.pruned_heads : Set[int]
+            プルーニングされたヘッドのセット
+        
+        Returns
+        -------
+        Theads : List[int]
+            プルーニングされたヘッドのリスト
+        index : List[int]
+            プルーニングされたヘッドのインデックス
+        """
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        #INFO: indexを基準に各線形変換層をプルーニング
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        #INFO: プルーニングされた分だけアテンションヘッド数を減らす
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        #INFO: all_head_size を再計算
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        #INFO: プルーニングされたヘッドを追加
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states           : torch.Tensor,
+        attention_mask          : Optional[torch.FloatTensor] = None,
+        head_mask               : Optional[torch.FloatTensor] = None,
+        encoder_hidden_states   : Optional[torch.FloatTensor] = None,
+        encoder_attention_mask  : Optional[torch.FloatTensor] = None,
+        past_key_value          : Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions       : Optional[bool] = False,
+    )   -> Tuple[torch.Tensor]:
+        #INFO: RobertaSelfAttention と RobertaSelfOutput を順次適用
+        #INFO: Self-Attention スコアの計算
+        self_outputs = self.self(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_value,
+            output_attentions,
+        )
+        #INFO: RoberaSelfOutput の適用
+        attention_output = self.output(self_outputs[0], hidden_states)
+        #INFO: 出力の設定
+        # -> attention_output : 新規隠れ状態
+        # -> self_outputs[1:] : アテンションの重み
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+
 
 class RobertaIntermediate(nn.Module): #! 未実装
 
