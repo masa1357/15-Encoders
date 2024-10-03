@@ -84,7 +84,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #           └ RobertaLayer              # -> 実装済
 #               └ RobertaAttention      # -> 実装済
 #               └ RobertaSelfAttention  # -> 実装済
-#               └ RobertaIntermediate   #! -> 未実装
+#               └ RobertaIntermediate   # -> 実装済
 #               └ RobertaSelfOutput     # -> 実装済
 #               └ RobertaOutput         #! -> 未実装
 #       └ RobertaPooler                 # -> 実装済
@@ -282,7 +282,6 @@ class RobertaEmbeddings(nn.Module): # -> 実装済
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape)
-
 
 class RobertaSelfAttention(nn.Module): # -> 実装済
     """
@@ -522,7 +521,6 @@ class RobertaSelfAttention(nn.Module): # -> 実装済
             outputs = outputs + (past_key_value,)
         return outputs
 
-
 class RobertaSelfOutput(nn.Module): # -> 実装済
     """
     Self-Attention の出力に対して，残差接続と LayerNormalization を適用
@@ -667,9 +665,30 @@ class RobertaAttention(nn.Module): # -> 実装済
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+class RobertaIntermediate(nn.Module): # -> 実装済
+    """
+    RoBERTa の FeedForward ネットワークの中間層を定義
+    """
+    #INFO: 初回実行
+    def __init__(self, config):
+        super().__init__()
+        #INFO: 線形変換層(Dense)の定義
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        #INFO: 活性化関数の定義
+        # -> ACT2FN : 活性化関数の辞書
+        # -> config.hidden_act : 活性化関数の設定
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        #INFO: 活性化関数が指定されていない場合，GELUを使用
+        else:
+            self.intermediate_act_fn = config.hidden_act
 
-
-class RobertaIntermediate(nn.Module): #! 未実装
+    #INFO: 順伝播
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        #INFO: 線形変換層(Dense)と活性化関数を順次適用
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
 
 class RobertaOutput(nn.Module): #! 未実装
 
