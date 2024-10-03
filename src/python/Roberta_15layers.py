@@ -82,8 +82,8 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #       └ RobertaEmbeddings             # -> 実装済
 #       └ RobertaEncoder                # -> 実装済
 #           └ RobertaLayer              # -> 実装済
-#               └ RobertaAttention      # -> 実装済
-#               └ RobertaSelfAttention  #! -> 未実装
+#               └ RobertaAttention      #! -> 未実装
+#               └ RobertaSelfAttention  # -> 実装済
 #               └ RobertaIntermediate   #! -> 未実装
 #               └ RobertaSelfOutput     #! -> 未実装
 #               └ RobertaOutput         #! -> 未実装
@@ -284,7 +284,9 @@ class RobertaEmbeddings(nn.Module): # -> 実装済
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class RobertaAttention(nn.Module): # -> 実装済
+class RobertaAttention(nn.Module): #! 未実装
+    
+class RobertaSelfAttention(nn.Module): # -> 実装済
     """
     RoBERTa の Self-Attention 実装
     入力テンソルに対して Self-Attention を適用し、情報を集約
@@ -522,7 +524,6 @@ class RobertaAttention(nn.Module): # -> 実装済
             outputs = outputs + (past_key_value,)
         return outputs
 
-class RobertaSelfAttention(nn.Module): #! 未実装
 
 class RobertaIntermediate(nn.Module): #! 未実装
 
