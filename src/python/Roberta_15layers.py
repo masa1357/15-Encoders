@@ -81,45 +81,16 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #    └ RobertaModel                     # -> 実装済
 #       └ RobertaEmbeddings             # -> 実装済
 #       └ RobertaEncoder                # -> 実装済
-#           └ RobertaLayer              #! -> 未実装
+#           └ RobertaLayer              # -> 実装済
 #               └ RobertaAttention      #! -> 未実装
 #               └ RobertaSelfAttention  #! -> 未実装
 #               └ RobertaIntermediate   #! -> 未実装
 #               └ RobertaSelfOutput     #! -> 未実装
 #               └ RobertaOutput         #! -> 未実装
-#       └ RobertaPooler                 #! -> 未実装
+#       └ RobertaPooler                 # -> 実装済
 #    └ RobertaFor15LayersClassification # -> 実装済
 #       └ RobertaModel(instance)        # -> 実装済
 #       └ RobertaClassificationHead     # -> 実装済
-
-class RobertaPreTrainedModel(PreTrainedModel):
-    """
-    モデルの重みを読み込むためのクラス
-    
-    """
-
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention"]
-
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 class RobertaEmbeddings(nn.Module):
     """
@@ -157,7 +128,7 @@ class RobertaEmbeddings(nn.Module):
         # -> 絶対位置埋め込み：位置IDをそのまま埋め込む
         # -> 相対位置埋め込み：位置IDを相対位置に変換して埋め込む
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        
+
         #INFO: 位置IDを保持するバッファの確保
         #INFO: torch.arange -> 0 から config.max_position_embeddings - 1 までの連続した整数を生成
         #INFO: expand((1, -1)) -> テンソルを拡張,新しい次元を追加
@@ -195,7 +166,7 @@ class RobertaEmbeddings(nn.Module):
             埋め込み層で padding_idx を指定すると、そのインデックスに対応する埋め込みベクトルは常にゼロになります。
             -> パディング部分がモデルの計算に影響を与えないようにします。
         
-        
+
         Layer Normalization の命名 :
             self.LayerNorm が CamelCase で命名されているのは、TensorFlow の変数名と一致させるためです。
             -> TensorFlow で事前学習されたモデルの重みを PyTorch モデルにロードする際に、名前の不一致による問題を防ぎます。
@@ -311,6 +282,212 @@ class RobertaEmbeddings(nn.Module):
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape)
+
+
+class RobertaAttention(nn.Module): #! 未実装
+
+class RobertaSelfAttention(nn.Module): #! 未実装
+
+class RobertaIntermediate(nn.Module): #! 未実装
+
+class RobertaSelfOutput(nn.Module): #! 未実装
+
+class RobertaOutput(nn.Module): #! 未実装
+
+
+#INFO: 既存のBERTモデルのコードをコピー: from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
+class RobertaLayer(nn.Module):
+    """
+    Encoder の内部構造を定義
+    -> Encoder Block
+        -> Attention -> Intermediate -> Output
+    """
+
+    #INFO: 初回実行
+    def __init__(self, config):
+        super().__init__()
+
+        #INFO: FeedForward ネットワークのチャンクサイズを設定
+        # -> チャンクサイズを設定することで，大きなテンソルを小さなテンソルに分割して順次処理することができる
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        #INFO: シーケンス長の次元を設定
+        self.seq_len_dim = 1
+        #INFO: Self-Attention レイヤーの定義
+        self.attention = RobertaAttention(config)
+        #INFO: Decoder モデルの場合，Cross-Attention レイヤーを追加
+        #INFO: is_decoder : デコーダフラグ
+        #INFO: add_cross_attention : クロスアテンションフラグ
+        self.is_decoder = config.is_decoder
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            #INFO: Decoderと明示していないならエラー
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            #INFO: Cross-Attention レイヤーの定義
+            # -> 絶対位置埋め込みを使用
+            self.crossattention = RobertaAttention(config, position_embedding_type="absolute")
+
+        #INFO: FeedForward ネットワークの定義
+        #INFO: 中間層の定義
+        #INFO: 活性化関数などの処理を行う
+        #! ここまとめられないかな？
+        self.intermediate = RobertaIntermediate(config)
+        #INFO: 出力層の定義
+        #INFO: 残差結合やLayerNormalizationを行う
+        self.output = RobertaOutput(config)
+
+    def forward(
+        self,
+        hidden_states           : torch.Tensor,
+        attention_mask          : Optional[torch.FloatTensor]               = None,
+        head_mask               : Optional[torch.FloatTensor]               = None,
+        encoder_hidden_states   : Optional[torch.FloatTensor]               = None,
+        encoder_attention_mask  : Optional[torch.FloatTensor]               = None,
+        past_key_value          : Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions       : Optional[bool]                            = False,
+    ) -> Tuple[torch.Tensor]:
+        """
+        RobertaLayer を通じて順伝播（フォワードパス）を実行
+
+        Parameters
+        ----------
+        hidden_states : torch.Tensor
+            前の層からの隠れ状態を表す入力テンソル。形状は `(batch_size, sequence_length, hidden_size)` です。
+
+        attention_mask : Optional[torch.FloatTensor], オプション
+            アテンションマスクのテンソル。形状は `(batch_size, 1, 1, sequence_length)` で、デフォルトは `None` です。
+            アテンション機構で特定の位置（例：パディングトークン）への注意を防ぐために使用されます。
+            マスクの値は 0（マスクする）または 1（マスクしない）です。
+
+        head_mask : Optional[torch.FloatTensor], オプション
+            ヘッドマスクのテンソル。形状は `(num_heads,)` または `(num_layers, num_heads)` で、デフォルトは `None` です。
+            自己注意機構内で特定のアテンションヘッドをマスクするために使用されます。
+            マスクの値は 0（マスクする）または 1（マスクしない）です。
+
+        encoder_hidden_states : Optional[torch.FloatTensor], オプション
+            エンコーダの隠れ状態のテンソル。形状は `(batch_size, encoder_sequence_length, hidden_size)` で、デフォルトは `None` です。
+            モデルが `add_cross_attention=True` でデコーダとして設定されている場合、クロスアテンションで使用されます。
+
+        encoder_attention_mask : Optional[torch.FloatTensor], オプション
+            エンコーダのアテンションマスクのテンソル。形状は `(batch_size, 1, 1, encoder_sequence_length)` で、デフォルトは `None` です。
+            クロスアテンション中にエンコーダの入力内の特定の位置をマスクするために使用されます。
+            `encoder_hidden_states` が提供されている場合にのみ関連します。
+
+        past_key_value : Optional[Tuple[Tuple[torch.FloatTensor]]], オプション
+            前のステップで計算されたキーとバリューのテンソルを含むタプル。デフォルトは `None` です。
+            デコーダーモデルでの逐次デコードを高速化するために使用されます。
+            各タプルには2つのテンソルが含まれます：形状が `(batch_size, num_heads, sequence_length, head_dim)` のキーとバリューのテンソルです。
+
+        output_attentions : Optional[bool], オプション
+            `True` に設定すると、出力の一部としてアテンションの重みが返されます。デフォルトは `False` です。
+
+        Returns
+        -------
+        Tuple[torch.Tensor]
+            以下を含むタプル：
+
+            - **hidden_states** (`torch.Tensor`): レイヤーの出力隠れ状態。形状は `(batch_size, sequence_length, hidden_size)`。
+
+            - **present_key_value** (`Tuple[Tuple[torch.FloatTensor]]`, オプション): 更新された過去のキーとバリューのテンソル。
+            `past_key_value` が提供されている場合に返されます（デコーダーモデルでのみ関連）。
+
+            - **attentions** (`torch.FloatTensor`, オプション): 自己アテンション（および適用可能な場合はクロスアテンション）のアテンション重み。
+            `output_attentions` が `True` の場合に返されます。
+        """
+
+        #INFO: 自己注意機構（Self-Attention）で使用する過去のキーとバリュー（past_key_value）を取得
+        # -> 推論の高速化
+        #INFO: pat_key_value は過去のキーとバリューの状態を含むタプル -> [0]:key, [1]:value
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+
+        #INFO: セルフアテンションの出力を取得
+        self_attention_outputs = self.attention(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
+            past_key_value=self_attn_past_key_value,
+        )
+        #INFO: self_attention_outputs[0]：セルフアテンションの出力
+        # -> [1]はAtteniton weight
+        attention_output = self_attention_outputs[0]
+
+        #INFO: デコーダの場合、self_attention_outputs[1:-1]によって隠れ層以外の出力を取得
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            #INFO: 更新されたキーとバリューを取得
+            # -> 次回のデコード処理で使用
+            present_key_value = self_attention_outputs[-1]
+        else:
+            #INFO: デコーダでない場合、キャッシュされたキーとバリューは存在しない
+            # -> 全て取得
+            outputs = self_attention_outputs[1:] 
+
+        #INFO: クロスアテンション初期化
+        cross_attn_present_key_value = None
+
+        #INFO: クロスアテンションの処理
+        #INFO: Decoder かつ Encoder の隠れ状態が存在する場合
+        if self.is_decoder and encoder_hidden_states is not None:
+            #INFO: crossattention が定義されていない場合，エラー
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
+                )
+
+            #INFO: past_key_value[2:] は過去のキーとバリューの状態を含むタプル -> [2]:key, [3]:value
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            #INFO: クロスアテンションの出力を取得
+            #INFO: 出力値: 
+            # -> cross_attention_outputs[0]  : 更新されたattention_output
+            # -> cross_attention_outputs[1]  : attention_weights (if output_attentions=True)
+            # -> cross_attention_outputs[-1] : 更新されたクロスアテンションのpresent_key_value
+            cross_attention_outputs = self.crossattention(
+                attention_output,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                cross_attn_past_key_value,
+                output_attentions,
+            )
+            #INFO: 更新されたcross_attention_outputをattention_outputに追加
+            attention_output = cross_attention_outputs[0]
+            #INFO: attention_weights を出力に追加
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            #INFO: クロスアテンションのキャッシュを present_key_value に追加
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
+        #INFO: FeedForward ネットワークの処理
+        #INFO: apply_chunking_to_forward() は大きなテンソルを小さなテンソルに分割して順次処理する
+        #INFO: feed_forward_chunk は FeedForward ネットワークを適用する関数
+        #INFO: chunk_size_feed_forward は FeedForward ネットワークのチャンクサイズ
+        #INFO: seq_len_dim はシーケンス長の次元(基本的に1)
+        #INFO: attention_output はセルフアテンションの出力 -> FeedForward ネットワークの入力テンソル
+        layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        )
+        #INFO: layer_output を outputs の先頭に追加
+        outputs = (layer_output,) + outputs
+
+        # if decoder, return the attn key/values as the last output
+        #INFO: デコーダの場合，present_key_value を outputs に追加
+        if self.is_decoder:
+            outputs = outputs + (present_key_value,)
+
+        return outputs
+
+    #INFO: FeedForward ネットワークの処理
+    def feed_forward_chunk(self, attention_output):
+        #INFO: 中間層の適用
+        intermediate_output = self.intermediate(attention_output)
+        #INFO: 出力層の適用 -> 残差接続とLayerNormalization
+        layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
+
 
 
 
@@ -541,6 +718,79 @@ class RobertaEncoder(nn.Module):
         )
 
 
+
+class RobertaPooler(nn.Module):
+    """
+    モデルの出力をプールするためのクラス
+    -> 隠れ状態から固定長のベクトルを生成し，タスクに適したヘッドに入力する
+    """
+
+    #INFO: 初回実行
+    def __init__(self, config):
+        super().__init__()
+        #INFO: 全結合層(Dence)の定義
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        #INFO: 活性化関数(tanh)の定義
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        順伝播処理
+        Parameters
+        ----------
+        hidden_states : torch.Tensor
+            モデルの隠れ状態のテンソル
+            size : (batch_size, sequence_length, hidden_size)
+        
+        Returns
+        -------
+        torch.Tensor
+            プールされた出力のテンソル
+            size : (batch_size, hidden_size)
+        """
+
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+
+        #INFO: [CLS] token の隠れ状態を取得
+        # -> [CLS] は入力シーケンス全体の要約特徴を持つと仮定されているらしい
+        first_token_tensor = hidden_states[:, 0]
+        #INFO: 全結合層を適用
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        #INFO: プールされた出力を返す
+        # -> 用途：上位モデルや分類器への入力
+        return pooled_output
+
+    
+
+class RobertaPreTrainedModel(PreTrainedModel):
+    """
+    モデルの重みを読み込むためのクラス
+    
+    """
+
+    config_class = RobertaConfig
+    base_model_prefix = "roberta"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention"]
+
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 class RobertaModel(RobertaPreTrainedModel):
     """
@@ -816,47 +1066,6 @@ class RobertaModel(RobertaPreTrainedModel):
         )
 
 
-class RobertaClassificationHead(nn.Module):
-    """
-    文章分類タスク用のヘッド
-    入力：CLSトークンのベクトル表現
-    出力：logit
-    """
-
-    #INFO: 初回実行
-    def __init__(self, config):
-        super().__init__()
-        #INFO: dense層（中間層）の定義 -> 全結合層（線形変換）
-        # -> output = input * weight.T + bias
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        #INFO: classification用のdropout率の設定
-        # -> 過学習の防止
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        #INFO: dropout層の定義
-        self.dropout = nn.Dropout(classifier_dropout)
-        #INFO: 出力層の定義
-        # -> 最終的な出力を得るための全結合層
-        # -> output = input * weight.T + bias
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-    def forward(self, features, **kwargs):
-        """
-        2層の全結合層からなるMLP(dence, out_proj)
-        MLP層を通して，最終的なlogitを得る
-        処理：
-        hidden_size -> dense -> tanh -> dropout -> out_proj -> logit
-        """
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = torch.tanh(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
 class RobertaFor15LayersClassification(RobertaPreTrainedModel):
     """
     最初に呼び出されるclass
@@ -1041,7 +1250,45 @@ class RobertaFor15LayersClassification(RobertaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+class RobertaClassificationHead(nn.Module):
+    """
+    文章分類タスク用のヘッド
+    入力：CLSトークンのベクトル表現
+    出力：logit
+    """
 
+    #INFO: 初回実行
+    def __init__(self, config):
+        super().__init__()
+        #INFO: dense層（中間層）の定義 -> 全結合層（線形変換）
+        # -> output = input * weight.T + bias
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        #INFO: classification用のdropout率の設定
+        # -> 過学習の防止
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        #INFO: dropout層の定義
+        self.dropout = nn.Dropout(classifier_dropout)
+        #INFO: 出力層の定義
+        # -> 最終的な出力を得るための全結合層
+        # -> output = input * weight.T + bias
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, features, **kwargs):
+        """
+        2層の全結合層からなるMLP(dence, out_proj)
+        MLP層を通して，最終的なlogitを得る
+        処理：
+        hidden_size -> dense -> tanh -> dropout -> out_proj -> logit
+        """
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
 
 
 
