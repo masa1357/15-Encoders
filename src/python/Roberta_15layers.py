@@ -86,7 +86,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #               └ RobertaSelfAttention  # -> 実装済
 #               └ RobertaIntermediate   # -> 実装済
 #               └ RobertaSelfOutput     # -> 実装済
-#               └ RobertaOutput         #! -> 未実装
+#               └ RobertaOutput         # -> 実装済
 #       └ RobertaPooler                 # -> 実装済
 #    └ RobertaFor15LayersClassification # -> 実装済
 #       └ RobertaModel(instance)        # -> 実装済
@@ -690,7 +690,27 @@ class RobertaIntermediate(nn.Module): # -> 実装済
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
-class RobertaOutput(nn.Module): #! 未実装
+class RobertaOutput(nn.Module): # -> 実装済
+    """
+    RoBERTa の FeedForward ネットワークにおける出力層を定義
+    """
+    #INFO: 初回実行
+    def __init__(self, config):
+        super().__init__()
+        #INFO: 線形変換層の定義
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        #INFO: LayerNormalization の定義
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        #INFO: Dropout の定義
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        #INFO: 線形変換層(Dense),Dropout,LayerNormalization を順次適用
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
 
 
 #INFO: 既存のBERTモデルのコードをコピー: from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
@@ -885,7 +905,6 @@ class RobertaLayer(nn.Module):
         #INFO: 出力層の適用 -> 残差接続とLayerNormalization
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
-
 
 
 
