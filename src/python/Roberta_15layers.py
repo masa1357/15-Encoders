@@ -85,7 +85,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #               └ RobertaAttention      #! -> 未実装
 #               └ RobertaSelfAttention  # -> 実装済
 #               └ RobertaIntermediate   #! -> 未実装
-#               └ RobertaSelfOutput     #! -> 未実装
+#               └ RobertaSelfOutput     # -> 実装済
 #               └ RobertaOutput         #! -> 未実装
 #       └ RobertaPooler                 # -> 実装済
 #    └ RobertaFor15LayersClassification # -> 実装済
@@ -284,8 +284,6 @@ class RobertaEmbeddings(nn.Module): # -> 実装済
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class RobertaAttention(nn.Module): #! 未実装
-    
 class RobertaSelfAttention(nn.Module): # -> 実装済
     """
     RoBERTa の Self-Attention 実装
@@ -525,9 +523,66 @@ class RobertaSelfAttention(nn.Module): # -> 実装済
         return outputs
 
 
-class RobertaIntermediate(nn.Module): #! 未実装
+class RobertaSelfOutput(nn.Module): # -> 実装済
+    """
+    Self-Attention の出力に対して，残差接続と LayerNormalization を適用
+    """
+    def __init__(self, config):
+        super().__init__()
+        #INFO: 線形変換層(dense)の定義
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        #INFO: LayerNormalization の定義
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        #INFO: Dropout の定義
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-class RobertaSelfOutput(nn.Module): #! 未実装
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        hidden_states : torch.Tensor
+            Self-Attention の出力
+        input_tensor : torch.Tensor
+            入力テンソル
+        
+        Returns
+        -------
+        torch.Tensor
+            出力テンソル
+        """
+        #INFO: 各層の処理を順次適用
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        """
+        補足情報
+        残差接続（Residual Connection）について
+            目的：
+            深いニューラルネットワークでの勾配消失問題を緩和します。
+            方法：
+            レイヤーの入力をその出力に直接足し合わせます。
+            効果：
+            ネットワークの学習が容易になり、より深い構造のモデルが訓練可能になります。
+        Layer Normalization について
+            目的：
+            各サンプルの特定の層内での出力を正規化し、学習を安定化させます。
+            方法：
+            入力テンソルの各タイムステップ（シーケンスの各位置）ごとに、特徴次元に沿って平均と分散を計算し、正規化します。
+            効果：
+            内部共変量シフトを軽減し、学習速度の向上や収束性の改善につながります。
+        ドロップアウトについて
+            目的：
+            過学習を防ぐために、学習時にランダムにノードを無効化します。
+            方法：
+            指定した確率でノードの出力をゼロにします。
+            効果：
+            モデルがより一般的な特徴を学習し、汎化性能が向上します。
+        """
+        return hidden_states
+
+class RobertaAttention(nn.Module): #! 未実装
+
+class RobertaIntermediate(nn.Module): #! 未実装
 
 class RobertaOutput(nn.Module): #! 未実装
 
