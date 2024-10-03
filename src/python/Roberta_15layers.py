@@ -90,7 +90,23 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #       └ RobertaPooler                 # -> 実装済
 #    └ RobertaFor15LayersClassification # -> 実装済
 #       └ RobertaModel(instance)        # -> 実装済
-#       └ RobertaClassificationHead     # -> 実装済
+#       └ RobertaClassificationHead     # -> 実装済 
+
+#INFO: model(**inputs) で呼び出されるクラスの順番
+# RobertaFor15LayersClassification          # -> importでこのクラスを呼び出す
+# └ PreTrainedModel                         # -> 事前学習済みモデルの基底クラス
+#    └ RobertaPreTrainedModel               # -> RoBERTaの事前学習済みモデルの基底クラス
+#       └ RobertaModel                      # -> RoBERTaの全体構造を定義
+#          └ RobertaEmbeddings              # -> トークンに対して位置情報を付加するための埋め込み層
+#          └ RobertaEncoder                 # -> Transformerのエンコーダ部分
+#             └ RobertaLayer                # -> Transformerのエンコーダレイヤー
+#                └ RobertaAttention         # -> Attentionの流れを定義
+#                   └ RobertaSelfAttention  # -> Self-Attentionの計算部分
+#                   └ RobertaSelfOutput     # -> Self-Attentionの出力部分
+#                └ RobertaIntermediate      # -> Self-Attentionの出力を処理するFFNの中間層
+#                └ RobertaOutput            # -> FFNの出力部分
+#          └ RobertaPooler                  # -> シーケンス全体の隠れ状態からプールされた出力を生成 -> CLSトークンの埋め込みから文全体を要約
+#       └ RobertaClassificationHead         # -> 分類タスク用のMLPヘッド
 
 class RobertaEmbeddings(nn.Module): # -> 実装済
     """
@@ -711,8 +727,6 @@ class RobertaOutput(nn.Module): # -> 実装済
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-
-
 #INFO: 既存のBERTモデルのコードをコピー: from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
 class RobertaLayer(nn.Module):
     """
@@ -905,8 +919,6 @@ class RobertaLayer(nn.Module):
         #INFO: 出力層の適用 -> 残差接続とLayerNormalization
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
-
-
 
 class RobertaEncoder(nn.Module):
     """
@@ -1134,8 +1146,6 @@ class RobertaEncoder(nn.Module):
                 cross_attentions=all_cross_attentions,
         )
 
-
-
 class RobertaPooler(nn.Module):
     """
     モデルの出力をプールするためのクラス
@@ -1178,8 +1188,6 @@ class RobertaPooler(nn.Module):
         #INFO: プールされた出力を返す
         # -> 用途：上位モデルや分類器への入力
         return pooled_output
-
-    
 
 class RobertaPreTrainedModel(PreTrainedModel):
     """
@@ -1482,7 +1490,6 @@ class RobertaModel(RobertaPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-
 class RobertaFor15LayersClassification(RobertaPreTrainedModel):
     """
     最初に呼び出されるclass
@@ -1706,21 +1713,6 @@ class RobertaClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 class Embedding(nn.Module):
     """
