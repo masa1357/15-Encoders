@@ -82,7 +82,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #       └ RobertaEmbeddings             # -> 実装済
 #       └ RobertaEncoder                # -> 実装済
 #           └ RobertaLayer              # -> 実装済
-#               └ RobertaAttention      #! -> 未実装
+#               └ RobertaAttention      # -> 実装済
 #               └ RobertaSelfAttention  #! -> 未実装
 #               └ RobertaIntermediate   #! -> 未実装
 #               └ RobertaSelfOutput     #! -> 未実装
@@ -92,7 +92,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 #       └ RobertaModel(instance)        # -> 実装済
 #       └ RobertaClassificationHead     # -> 実装済
 
-class RobertaEmbeddings(nn.Module):
+class RobertaEmbeddings(nn.Module): # -> 実装済
     """
     トークンに対して位置情報を付加するための埋め込み層
     BERTの埋め込みと同様の実装とほぼ同じだが，位置埋め込みのindexに若干の変更がある
@@ -284,7 +284,243 @@ class RobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class RobertaAttention(nn.Module): #! 未実装
+class RobertaAttention(nn.Module): # -> 実装済
+    """
+    RoBERTa の Self-Attention 実装
+    入力テンソルに対して Self-Attention を適用し、情報を集約
+    マルチヘッドアテンションを使用し、複数の異なる表現を学習
+    """
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+        #INFO: hidden_size が num_attention_heads の整数倍か確認
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            #INFO: False の場合，エラー
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        #INFO: Attention head のサイズ計算
+        # -> hidden_size / num_attention_heads
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        #INFO: 本質的には hidden_size と同じ
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        #INFO: Query, Key, Value の線形変換層の定義
+        # -> 学習可能パラメータ
+        #INFO: hidden_size -> all_head_size
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        #INFO: Attention ドロップアウトの定義
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        #INFO: 位置埋め込みのタイプの設定
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        #INFO: 相対位置埋め込みの場合，距離埋め込みの定義
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+
+        #INFO: デコーダモデルの設定を取得
+        self.is_decoder = config.is_decoder
+
+    #INFO: スコア計算のためのテンソル変換関数
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        x : torch.Tensor    : 入力テンソル
+            size            : (batch_size, sequence_length, all_head_size)
+        
+        Returns
+        -------
+        torch.Tensor        : 転置されたテンソル
+            size            : (batch_size, num_attention_heads, sequence_length, attention_head_size)
+        """
+        #INFO: テンソルの最後の次元を(num_attention_heads, attention_head_size)に変換
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        #INFO: view() でテンソルの形状を変更
+        # -> (batch_size, sequence_length, all_head_size)
+        # -> (batch_size, sequence_length, num_attention_heads, attention_head_size)
+        x = x.view(new_x_shape)
+        #INFO: permute() で次元の順番を並び替える
+        # -> (batch_size, num_attention_heads, sequence_length, attention_head_size)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        hidden_states           : torch.Tensor,
+        attention_mask          : Optional[torch.FloatTensor] = None,
+        head_mask               : Optional[torch.FloatTensor] = None,
+        encoder_hidden_states   : Optional[torch.FloatTensor] = None,
+        encoder_attention_mask  : Optional[torch.FloatTensor] = None,
+        past_key_value          : Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions       : Optional[bool] = False,
+    )   -> Tuple[torch.Tensor]:
+    """
+    このメソッドは、自己注意（Self-Attention）やクロスアテンション（Cross-Attention）を計算し、隠れ状態を更新します。
+
+    Parameters
+    ----------
+    hidden_states           : torch.Tensor
+        現在のレイヤーへの入力隠れ状態。形状は `(batch_size, sequence_length, hidden_size)`。
+
+    attention_mask          : Optional[torch.FloatTensor], オプション
+        アテンションマスク。形状は `(batch_size, 1, 1, sequence_length)`。
+
+    head_mask               : Optional[torch.FloatTensor], オプション
+        アテンションヘッドをマスクするためのテンソル。
+
+    encoder_hidden_states   : Optional[torch.FloatTensor], オプション
+        エンコーダの隠れ状態。クロスアテンションで使用。
+
+    encoder_attention_mask  : Optional[torch.FloatTensor], オプション
+        エンコーダのアテンションマスク。
+
+    past_key_value          : Optional[Tuple[Tuple[torch.FloatTensor]]], オプション
+        過去のキーとバリューのキャッシュ。
+
+    output_attentions       : Optional[bool], オプション
+        アテンションの重みを出力するかどうか。
+
+    Returns
+    -------
+    Tuple[torch.Tensor]
+        更新された隠れ状態やアテンションの重み、キャッシュを含むタプル。
+
+    """
+        #INFO: queryの計算
+        # -> hidden_states に線形変換を適用し，queryを求める
+        mixed_query_layer = self.query(hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        #INFO: encoder_hidden_states が提供されている場合はcross-attentionを実行
+        is_cross_attention = encoder_hidden_states is not None
+
+        #INFO: cross-attentionの計算部分
+        #INFO: case1 : cross-attention かつ過去のキャッシュがある場合
+        if is_cross_attention and past_key_value is not None:
+            #INFO: 過去のキャッシュを再利用して，keyとvalueを取得
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        #INFO: case2 : cross-attention かつ過去のキャッシュがない場合
+        elif is_cross_attention:
+            #INFO: encoder_hidden_states に線形変換を適用し，keyとvalueを求める
+            #INFO: transpose_for_scores() でテンソルの形状を変更
+            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
+            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            attention_mask = encoder_attention_mask
+        #INFO: case3 : cross-attention でない場合 かつ 過去のキャッシュがある場合
+        elif past_key_value is not None:
+            #INFO: 過去のキャッシュを再利用して，keyとvalueを取得
+            # -> cross-attention 出ない場合は，引数がhidden_states となる
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        #INFO: case4 : cross-attention でない場合 かつ 過去のキャッシュがない場合
+        else:
+            #INFO: hidden_states（現在の隠れ状態） に線形変換を適用し，keyとvalueを求める
+            key_layer = self.transpose_for_scores(self.key(hidden_states))
+            value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        #INFO: query_layer の形状を変更
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        #INFO: 過去のキャッシュがあるかどうか
+        use_cache = past_key_value is not None
+        #INFO: decoder の場合，keyとvalueをキャッシュ
+        if self.is_decoder:
+            # クロスアテンションの場合は、すべてのクロスアテンションのキー/値の状態の Tuple(torch.Tensor, torch.Tensor) を保存します。
+            # クロスアテンション レイヤーへの以降の呼び出しでは、すべてのクロスアテンションのキー/値の状態を再利用できます (最初の "if" ケース)
+            # 単方向セルフアテンション (デコーダー) の場合は、以前のすべてのデコーダーのキー/値の状態の Tuple(torch.Tensor, torch.Tensor) を保存します。単方向セルフアテンションへの以降の呼び出しでは、以前のデコーダーのキー/値の状態を現在の投影されたキー/値の状態と連結できます (3 番目の "elif" ケース)
+            # エンコーダーの双方向セルフアテンションの場合は、`past_key_value` は常に `None` です
+            past_key_value = (key_layer, value_layer)
+
+        #INFO: Attention スコアの計算
+        #INFO: query_layer と key_layer の内積を取ることで，Attention スコアを計算
+        #INFO: 形状変換も行う
+        # -> (batch_size, num_heads, query_length, key_length)
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        #INFO: 相対位置埋め込みの計算・適用
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
+            #INFO: 位置IDの計算
+            #INFO: use_cache が True の場合，key_length - 1 を使用して計算
+            if use_cache:
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
+                    -1, 1
+                )
+            #INFO: use_cache が False の場合，query_length を使用して計算
+            else:
+                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            
+            #INFO: key_length を計算
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            #INFO: 位置IDの差分を計算
+            # -> l: query_length, r: key_length
+            distance = position_ids_l - position_ids_r
+
+            #INFO: 距離埋め込みの取得
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            #INFO: queryのデータ型に合わせる
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+
+            #INFO: 相対位置埋め込みの場合，query_layer に距離埋め込みを加算
+            if self.position_embedding_type == "relative_key":
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores
+            elif self.position_embedding_type == "relative_key_query":
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+
+        #INFO: Attention スケーリング
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        #INFO: Attention マスクの適用
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        #INFO: Attention スコアの正規化
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        #INFO: Attention ドロップアウトの適用
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        #INFO: head_mask が指定されている場合，マスクを適用してアテンションヘッドを無効化
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        #INFO: value_layer に attention_probs(確率値) を適用して，context_layer（新規隠れ状態） を計算
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        #INFO: context_layer の形状を変更
+        # -> (batch_size, sequence_length, hidden_size)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        #INFO: 出力の設定
+        # -> context_layer : 新規隠れ状態
+        # -> attention_probs : アテンションの重み
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        #INFO: Decoder モデルの場合，キャッシュを返す
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
 
 class RobertaSelfAttention(nn.Module): #! 未実装
 
