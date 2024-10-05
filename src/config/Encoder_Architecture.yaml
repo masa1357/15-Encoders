@@ -1,8 +1,33 @@
-# Transformer Encoder のパラメータ設定
-# 指定可能パラメータ：num_layers, d_model, num_heads, dff, dropout_rate
+num_class: 5
 
-num_layers: 15
-d_model: 512
-num_heads: 8
-dff: 2048
-dropout_rate: 0.1
+RobertaConfig:
+  architectures:
+    - "RobertaForSequenceClassification"
+  attention_probs_dropout_prob: 0.1
+  bos_token_id: 2
+  classifier_dropout: null
+  eos_token_id: 3
+  hidden_act: "gelu"
+  hidden_dropout_prob: 0.1
+  hidden_size: 768
+  initializer_range: 0.02
+  intermediate_size: 3072
+  layer_norm_eps: 1e-12
+  max_position_embeddings: 514
+  model_type: "roberta"
+  num_attention_heads: 12
+  num_hidden_layers: 14
+  pad_token_id: 0
+  position_embedding_type: "absolute"
+  torch_dtype: "float32"
+  transformers_version: "4.38.1"
+  type_vocab_size: 2
+  use_cache: true
+  vocab_size: 32000
+  is_decoder: True
+  log: True
+  log_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers"
+  is_15layers: True
+  add_cross_attention: True
+  is_check_state: True
+  hidden_state_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers/hidden_states/"

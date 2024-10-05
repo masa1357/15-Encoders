@@ -1,0 +1,151 @@
+{
+    "os": "Linux-6.2.0-34-generic-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "heartbeatAt": "2024-10-04T15:56:43.536337",
+    "startedAt": "2024-10-04T15:56:42.703589",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "<python with no main file>",
+    "codePathLocal": null,
+    "git": {
+        "remote": "https://github.com/masa1357/15-Encoders.git",
+        "commit": "84c13a76c3f92026f5d382805a6256d4feb67c67"
+    },
+    "email": "masa1357@mprg.cs.chubu.ac.jp",
+    "root": "/home/masa1357/Dockerdata/gitfile/15-Encoders",
+    "host": "c43b6c60b8ae",
+    "username": "root",
+    "executable": "/bin/python3",
+    "cpu_count": 10,
+    "cpu_count_logical": 20,
+    "cpu_freq": {
+        "current": 1814.2938499999996,
+        "min": 1200.0,
+        "max": 4000.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2599.916,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1199.952,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.748,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.877,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 2499.864,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 2500.946,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 2497.487,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1350.932,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 3000.561,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 3399.885,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1929.335,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.0,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.17,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.0,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 2500.064,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1757.706,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 2495.422,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 2600.0,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 3004.892,
+            "min": 1200.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.0,
+            "min": 1200.0,
+            "max": 4000.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 915.3232879638672,
+            "used": 578.0335464477539
+        }
+    },
+    "gpu": "NVIDIA TITAN RTX",
+    "gpu_count": 2,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA TITAN RTX",
+            "memory_total": 25769803776
+        },
+        {
+            "name": "NVIDIA TITAN RTX",
+            "memory_total": 25769803776
+        }
+    ],
+    "memory": {
+        "total": 125.65890121459961
+    }
+}
