@@ -29,5 +29,6 @@ RobertaConfig:
   log_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers"
   is_15layers: True
   add_cross_attention: True
-  is_check_state: True
-  hidden_state_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers/hidden_states/"
+  is_check_state: False
+  # hidden_state_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers/hidden_states/"
+  # output_hidden_states: True

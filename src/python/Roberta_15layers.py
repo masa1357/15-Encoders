@@ -1270,7 +1270,7 @@ class RobertaEncoder(nn.Module):
 
         #INFO:  return_dict が False の場合，タプル形式で返す
         #!一時的にall_hidden_statesはNoneにしておく
-        all_hidden_states = None
+        # all_hidden_states = None
         if not return_dict:
             return tuple(
                 v
