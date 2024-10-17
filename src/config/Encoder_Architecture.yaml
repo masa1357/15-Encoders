@@ -24,11 +24,12 @@ RobertaConfig:
   type_vocab_size: 2
   use_cache: true
   vocab_size: 32000
-  is_decoder: True
-  log: True
-  log_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers"
-  is_15layers: True
-  add_cross_attention: True
+  is_decoder: True # decoder構造を使う場合はTrueにする
+  add_cross_attention: True # cross attentionを使う場合はTrueにする
+  is_15layers: True # 15層のモデルを使う場合はTrueにする -> hidden_stateの逐次更新処理
+  log: True # std_logを出力する場合はTrueにする
+  log_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers" # std_logの出力先
+  # hidden_stateの保存（あんまいらないかも）
   is_check_state: False
   # hidden_state_path: "/home/masa1357/Dockerdata/gitfile/15-Encoders/src/log/15layers/hidden_states/"
   # output_hidden_states: True
